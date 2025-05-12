@@ -4,15 +4,17 @@ using System.Collections;
 
 public class TrajectoryTracker : MonoBehaviour
 {
-    private Transform headTransform;//头显位置方向信息
-    public GameObject redDotPrefab; // 拖入红点预制体
+    [Header("Tracking Settings")]
+    private Transform headTransform;
+    public GameObject redDotPrefab;
     private Queue<GameObject> dotsQueue = new Queue<GameObject>();
-    private const int MaxDots = 60; // 最大点数
+    public int MaxDots = 60;
+
+    private bool isAutoCleanEnabled = true; // 默认自动清理旧点
 
     void Start()
     {
         headTransform = GameObject.Find("CenterEyeAnchor").transform;
-        // 启动协程，每隔1/60秒生成一个点
         StartCoroutine(SpawnDots());
     }
 
@@ -20,21 +22,43 @@ public class TrajectoryTracker : MonoBehaviour
     {
         while (true)
         {
-            yield return new WaitForSeconds(1f / 60f); // 精确间隔
+            yield return new WaitForSeconds(1f / 60f);
             AddDot();
         }
     }
 
     void AddDot()
     {
-        // 生成红点并记录位置
         GameObject dot = Instantiate(redDotPrefab, headTransform.position, Quaternion.identity);
         dotsQueue.Enqueue(dot);
 
-        // 超过60个点时移除最早的点
-        if (dotsQueue.Count > MaxDots)
+        // 仅在自动清理模式时限制数量
+        if (isAutoCleanEnabled && dotsQueue.Count > MaxDots)
         {
-            Destroy(dotsQueue.Dequeue());
+            DestroyOldestDot();
+        }
+    }
+
+    public void TogglePersistence()
+    {
+        isAutoCleanEnabled = !isAutoCleanEnabled;
+        Debug.Log($"Red dot persistence: {!isAutoCleanEnabled}");
+    }
+
+    void DestroyOldestDot()
+    {
+        GameObject oldDot = dotsQueue.Dequeue();
+        if (oldDot != null)
+        {
+            Destroy(oldDot);
+        }
+    }
+
+    public void ClearAllDots()
+    {
+        while (dotsQueue.Count > 0)
+        {
+            DestroyOldestDot();
         }
     }
 }

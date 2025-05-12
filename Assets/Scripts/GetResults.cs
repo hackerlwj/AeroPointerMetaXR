@@ -5,6 +5,7 @@ using System.Net.Sockets;
 using System.Text;
 using Oculus.Interaction.Locomotion;
 using UnityEngine.UI;
+using TMPro;
 
 // 网络传输数据结构定义（必须标记为可序列化）
 [System.Serializable]
@@ -57,10 +58,10 @@ public class GetResults : MonoBehaviour
     public TeleportArcGravity rightTeleportArcGravity; // 右手传送射线方向组件
     public TeleportArcGravity leftTeleportArcGravity;  // 左手传送射线方向组件
     public Transform targetObject;                     // 坐标系原点目标物体
-    public Text headPositionText;                      // 头部位置显示文本
-    public Text headDirectionText;                     // 头部方向显示文本
-    public Text rightHandDirectionText;                // 右手方向显示文本
-    public Text leftHandDirectionText;                 // 左手方向显示文本
+    public TMP_Text showText;                      // 头部位置和方向等信息显示文本
+    //public TMP_Text headDirectionText;                     // 头部方向显示文本
+    //public TMP_Text rightHandDirectionText;                // 右手方向显示文本
+    //public TMP_Text leftHandDirectionText;                 // 左手方向显示文本
     public Canvas vrCanvas;                            // VR界面画布
     public float uiDistance = 0.5f;                    // UI距离头显的默认距离（米）
     public Vector3 uiOffset = new Vector3(-0.5f, 0.2f, 0); // UI相对头显的偏移量
@@ -149,7 +150,7 @@ public class GetResults : MonoBehaviour
                 };
 
                 // 发送数据
-                SendHeadData(data);
+                //SendHeadData(data);
                 _lastSendTime = Time.time;
             }
         }
@@ -184,14 +185,38 @@ public class GetResults : MonoBehaviour
     // 更新UI显示内容
     void UpdateUI(Vector3 pos, Quaternion headRot, Quaternion rightRot, Quaternion leftRot)
     {
-        // 位置显示（保留2位小数）
-        headPositionText.text = $"当前位置:\nX:{pos.x:F2} Y:{pos.y:F2} Z:{pos.z:F2}";
+        // 颜色常量定义
+        const string X_COLOR = "#FF6666"; // 红色系
+        const string Y_COLOR = "#66FF66"; // 绿色系 
+        const string Z_COLOR = "#6699FF"; // 蓝色系
+        const string W_COLOR = "#AAAAAA"; // 中性灰
 
-        // 头部方向显示（四元数 + 欧拉角）
+        var sb = new System.Text.StringBuilder();
+
+        // ===== 位置坐标 =====
+        sb.AppendLine("<b><color=#4DA6FF>=== POSITION ===</color></b>");
+        sb.AppendLine($"<color={X_COLOR}>X:</color> <pos=25%>{pos.x,8:F2}</pos>");
+        sb.AppendLine($"<color={Y_COLOR}>Y:</color> <pos=25%>{pos.y,8:F2}</pos>");
+        sb.AppendLine($"<color={Z_COLOR}>Z:</color> <pos=25%>{pos.z,8:F2}</pos>");
+        sb.AppendLine("---------------------");
+
+        // ===== 欧拉角 =====
         Vector3 euler = headRot.eulerAngles;
-        headDirectionText.text = $"头部旋转:\n" +
-                                $"欧拉角: X:{euler.x:F1}° Y:{euler.y:F1}° Z:{euler.z:F1}°\n" +
-                                $"四元数: X:{headRot.x:F2} Y:{headRot.y:F2} Z:{headRot.z:F2}";
+        sb.AppendLine("<b><color=#FFB84D>=== ROTATION ===</color></b>");
+        sb.AppendLine("<color=#AAAAAA>Euler Angles:</color>");
+        sb.AppendLine($"<color={X_COLOR}>Pitch(X):</color> <pos=35%>{euler.x,7:F1}°</pos>");
+        sb.AppendLine($"<color={Y_COLOR}>Yaw(Y):</color>   <pos=35%>{euler.y,7:F1}°</pos>");
+        sb.AppendLine($"<color={Z_COLOR}>Roll(Z):</color>  <pos=35%>{euler.z,7:F1}°</pos>");
+        sb.AppendLine("---------------------");
+
+        // ===== 四元数 =====
+        sb.AppendLine("<b><color=#FF80FF>=== QUATERNION ===</color></b>");
+        sb.AppendLine($"<color={X_COLOR}>X:</color> <pos=15%>{headRot.x,+9:F4}</pos>");
+        sb.AppendLine($"<color={Y_COLOR}>Y:</color> <pos=15%>{headRot.y,+9:F4}</pos>");
+        sb.AppendLine($"<color={Z_COLOR}>Z:</color> <pos=15%>{headRot.z,+9:F4}</pos>");
+        sb.AppendLine($"<color={W_COLOR}>W:</color> <pos=15%>{headRot.w,+9:F4}</pos>");
+
+        showText.text = sb.ToString();
     }
 
     // 调整UI位置（始终位于头显左前方）
