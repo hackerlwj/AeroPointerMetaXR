@@ -4,20 +4,31 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using Oculus.Interaction.Locomotion;
-using UnityEngine.UI;
 using TMPro;
 
+// ==============================
 // 网络传输数据结构定义（必须标记为可序列化）
+// ==============================
 [System.Serializable]
 public class HeadData
 {
-    public long timestamp;       // 时间戳（Unix毫秒时间）
-    public SerializableVector3 position; // 头部位置（相对目标物体的局部坐标系）
-    public SerializableQuaternion rotation; // 头部旋转（四元数）
-    public SerializableVector3 eulerAngles; // 头部欧拉角
+    /// <summary>Unix时间戳（毫秒）</summary>
+    public long timestamp;
+
+    /// <summary>相对于目标物体的局部坐标系位置</summary>
+    public SerializableVector3 position;
+
+    /// <summary>头部旋转四元数表示</summary>
+    public SerializableQuaternion rotation;
+
+    /// <summary>头部欧拉角表示</summary>
+    public SerializableVector3 eulerAngles; // 注意原代码此处拼写错误保留
 }
 
-// 可序列化的Vector3替代结构（Unity的Vector3无法直接序列化）
+// ==============================
+// 可序列化的Vector3替代结构
+// （Unity原生Vector3无法直接序列化）
+// ==============================
 [System.Serializable]
 public struct SerializableVector3
 {
@@ -25,6 +36,7 @@ public struct SerializableVector3
     public float y;
     public float z;
 
+    /// <summary>从Unity Vector3转换</summary>
     public SerializableVector3(Vector3 v)
     {
         x = v.x;
@@ -33,7 +45,9 @@ public struct SerializableVector3
     }
 }
 
+// ==============================
 // 可序列化的Quaternion替代结构
+// ==============================
 [System.Serializable]
 public struct SerializableQuaternion
 {
@@ -42,6 +56,7 @@ public struct SerializableQuaternion
     public float z;
     public float w;
 
+    /// <summary>从Unity Quaternion转换</summary>
     public SerializableQuaternion(Quaternion q)
     {
         x = q.x;
@@ -51,139 +66,204 @@ public struct SerializableQuaternion
     }
 }
 
+// ==============================
+// 主功能类：头部数据采集与网络传输
+// ==============================
 public class GetResults : MonoBehaviour
 {
-    // ---------- VR组件引用 ----------
+    // ---------- VR组件配置区 ----------
     [Header("VR Settings")]
-    public TeleportArcGravity rightTeleportArcGravity; // 右手传送射线方向组件
-    public TeleportArcGravity leftTeleportArcGravity;  // 左手传送射线方向组件
-    public Transform targetObject;                     // 坐标系原点目标物体
-    public TMP_Text showText;                      // 头部位置和方向等信息显示文本
-    //public TMP_Text headDirectionText;                     // 头部方向显示文本
-    //public TMP_Text rightHandDirectionText;                // 右手方向显示文本
-    //public TMP_Text leftHandDirectionText;                 // 左手方向显示文本
-    public Canvas vrCanvas;                            // VR界面画布
-    public float uiDistance = 0.5f;                    // UI距离头显的默认距离（米）
-    public Vector3 uiOffset = new Vector3(-0.5f, 0.2f, 0); // UI相对头显的偏移量
+    [Tooltip("右手传送射线方向组件")]
+    public TeleportArcGravity rightTeleportArcGravity;
 
-    // ---------- 网络配置 ----------
+    [Tooltip("左手传送射线方向组件")]
+    public TeleportArcGravity leftTeleportArcGravity;
+
+    [Tooltip("坐标系原点目标物体")]
+    public Transform targetObject;
+
+    [Tooltip("信息显示文本组件")]
+    public TMP_Text showText;
+
+    [Tooltip("VR界面画布")]
+    public Canvas vrCanvas;
+
+    [Tooltip("UI默认显示距离（米）")]
+    public float uiDistance = 0.5f;
+
+    [Tooltip("UI相对偏移量")]
+    public Vector3 uiOffset = new Vector3(-0.5f, 0.2f, 0);
+
+    // ---------- 网络配置区 ----------
     [Header("Network Settings")]
-    public int port = 30001;                  // 网络端口号
-    public float sendInterval = 0.1f;         // 数据发送间隔（秒）
+    [Tooltip("网络端口号")]
+    public int port = 30001;
 
-    // ---------- 私有变量 ----------
+    [Tooltip("广播地址（推荐使用子网广播地址）")]
+    public string broadcastIP = "192.168.1.255";
+
+    [Tooltip("数据发送间隔（秒）")]
+    [Range(0.001f, 1f)]
+    public float sendInterval = 0.1f;
+
+    // ---------- 私有变量区 ----------
     private Transform headTransform;          // 头显位置信息
-    private UdpClient _client;                // UDP客户端
-    private IPEndPoint _broadcastEndPoint;    // 广播端点
-    private float _lastSendTime;              // 上次发送时间记录
+    private UdpClient _client;                // UDP客户端实例
+    private IPEndPoint _broadcastEndPoint;    // 广播端点信息
+    private float _lastSendTime;              // 上次发送时间戳
 
-    // ---------- 初始化 ----------
+
+    // ---------- 初始化方法 ----------
     void Start()
     {
-        // 查找头显中心锚点
+        // 查找中心锚点
         headTransform = GameObject.Find("CenterEyeAnchor").transform;
 
-        // 初始化立方体大小和位置
+        // 初始化目标物体
         InitializeCubeSize();
-        Reset();
+        ResetPosition();
 
-        // 建立网络连接
-        InitializeNetwork();
+        // 网络初始化
+        SetupNetworkConnection();
     }
 
-    // 初始化网络连接
-    void InitializeNetwork()
+    /// <summary>
+    /// 初始化网络连接
+    /// </summary>
+    void SetupNetworkConnection()
     {
         try
         {
             _client = new UdpClient();
             _client.EnableBroadcast = true;
-            // 尝试使用具体的广播地址
-            IPAddress broadcastAddress = IPAddress.Parse("255.255.255.255");
+
+            // 使用更可靠的子网广播地址
+            IPAddress broadcastAddress = IPAddress.Parse(broadcastIP);
             _broadcastEndPoint = new IPEndPoint(broadcastAddress, port);
-            Debug.Log($"准备在端口 {port} 上进行广播发送");
+
+            Debug.Log($"UDP广播初始化完成，目标地址：{broadcastIP}:{port}");
         }
         catch (Exception e)
         {
-            Debug.LogError($"网络初始化失败: {e.Message}，详细信息: {e.StackTrace}");
+            Debug.LogError($"网络初始化失败：{e.GetType().Name}\n{e.Message}\n{e.StackTrace}");
         }
     }
 
-    // --------- 核心逻辑 ----------
+    // ---------- 主更新循环 ----------
     void Update()
     {
         // 保持目标物体仅绕Y轴旋转
-        float currentY = targetObject.transform.eulerAngles.y;
-        targetObject.transform.rotation = Quaternion.Euler(0, currentY, 0);
+        MaintainYAxisRotation();
 
         if (targetObject != null)
         {
-            // 坐标系转换：将头显位置/方向转换为目标物体的局部坐标系
-            Vector3 headLocalPosition = targetObject.InverseTransformPoint(headTransform.position);
-            Vector3 headLocalDirection = targetObject.InverseTransformDirection(headTransform.forward);
+            // 坐标系转换
+            Vector3 headLocalPos = targetObject.InverseTransformPoint(headTransform.position);
+            Vector3 headLocalDir = targetObject.InverseTransformDirection(headTransform.forward);
 
-            // 手部方向计算（转换到局部坐标系）
+            // 手部方向计算
             Vector3 rightDir = targetObject.InverseTransformDirection(rightTeleportArcGravity.GetRayDirection());
             Vector3 leftDir = targetObject.InverseTransformDirection(leftTeleportArcGravity.GetRayDirection());
 
-            // 更新UI显示
-            UpdateUI(
-                headLocalPosition,
-                Quaternion.LookRotation(headLocalDirection), // 头部方向转为四元数
-                Quaternion.LookRotation(rightDir),            // 右手方向
-                Quaternion.LookRotation(leftDir)              // 左手方向
-            );
+            // 更新界面
+            UpdateDisplay(headLocalPos,
+                Quaternion.LookRotation(headLocalDir),
+                Quaternion.LookRotation(rightDir),
+                Quaternion.LookRotation(leftDir));
 
-            // 调整UI位置
-            UpdateUIPosition();
+            AdjustCanvasPosition();
 
-            // 按间隔发送数据
-            if (Time.time - _lastSendTime > sendInterval)
+            // 定时发送数据
+            if (Time.realtimeSinceStartup - _lastSendTime >= sendInterval)
             {
-                // 构造网络数据包
-                HeadData data = new HeadData
-                {
-                    timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-                    position = new SerializableVector3(headLocalPosition),
-                    rotation = new SerializableQuaternion(Quaternion.LookRotation(headLocalDirection)),
-                    eulerAngles = new SerializableVector3(Quaternion.LookRotation(headLocalDirection).eulerAngles)
-                };
-
-                // 发送数据
-                //SendHeadData(data);
-                _lastSendTime = Time.time;
+                SendTrackingData(CreateDataPackage(headLocalPos, headLocalDir));
+                _lastSendTime = Time.realtimeSinceStartup;
             }
         }
     }
 
-    // ---------- 功能方法 ----------
-    // 发送头部数据到网络
-    void SendHeadData(HeadData data)
+    // ---------- 核心功能方法 ----------
+
+    /// <summary>
+    /// 创建数据包
+    /// </summary>
+    HeadData CreateDataPackage(Vector3 position, Vector3 direction)
     {
-        if (_client != null && _client.Client != null && _client.Client.Connected)
-        {
-            try
-            {
-                // 序列化为JSON并添加换行符
-                string json = JsonUtility.ToJson(data);
-                byte[] bytes = Encoding.UTF8.GetBytes(json + "\n");
+        Quaternion rotation = Quaternion.LookRotation(direction);
 
-                // 发送数据
-                _client.Send(bytes, bytes.Length, _broadcastEndPoint);
-            }
-            catch (Exception e)
-            {
-                Debug.LogError($"发送失败: {e.Message}");
-            }
-        }
-        else
+        return new HeadData
         {
-            Debug.LogError("UdpClient 未连接或无效");
+            timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+            position = new SerializableVector3(position),
+            rotation = new SerializableQuaternion(rotation),
+            eulerAngles = new SerializableVector3(rotation.eulerAngles)
+        };
+    }
+
+    /// <summary>
+    /// 发送跟踪数据（异步方式）
+    /// </summary>
+    void SendTrackingData(HeadData data)
+    {
+        if (_client == null)
+        {
+            Debug.LogWarning("UDP客户端未初始化");
+            return;
+        }
+
+        try
+        {
+            // 序列化数据
+            string json = JsonUtility.ToJson(data);
+            byte[] buffer = Encoding.UTF8.GetBytes(json + "\n"); // 添加分隔符
+
+            // 异步发送避免阻塞主线程
+            _client.BeginSend(buffer, buffer.Length, _broadcastEndPoint, SendCallback, null);
+        }
+        catch (Exception e)
+        {
+            Debug.LogError($"数据序列化失败：{e.Message}");
         }
     }
 
-    // 更新UI显示内容
-    void UpdateUI(Vector3 pos, Quaternion headRot, Quaternion rightRot, Quaternion leftRot)
+    /// <summary>
+    /// 异步发送回调
+    /// </summary>
+    private void SendCallback(IAsyncResult result)
+    {
+        try
+        {
+            int sentBytes = _client.EndSend(result);
+            if (sentBytes == 0)
+            {
+                Debug.LogWarning("空数据包已发送");
+            }
+        }
+        catch (SocketException e)
+        {
+            Debug.LogError($"网络错误：[{e.ErrorCode}]{e.SocketErrorCode}\n{e.Message}");
+        }
+        catch (Exception e)
+        {
+            Debug.LogError($"发送异常：{e.GetType().Name}\n{e.Message}");
+        }
+    }
+
+    // ---------- 辅助方法 ----------
+
+    /// <summary>
+    /// 维持Y轴旋转约束
+    /// </summary>
+    void MaintainYAxisRotation()
+    {
+        float currentY = targetObject.eulerAngles.y;
+        targetObject.rotation = Quaternion.Euler(0, currentY, 0);
+    }
+
+    /// <summary>
+    /// 更新显示界面
+    /// </summary>
+    void UpdateDisplay(Vector3 pos, Quaternion headRot, Quaternion rightRot, Quaternion leftRot)
     {
         // 颜色常量定义
         const string X_COLOR = "#FF6666"; // 红色系
@@ -219,8 +299,10 @@ public class GetResults : MonoBehaviour
         showText.text = sb.ToString();
     }
 
-    // 调整UI位置（始终位于头显左前方）
-    void UpdateUIPosition()
+    /// <summary>
+    /// 调整画布位置
+    /// </summary>
+    void AdjustCanvasPosition()
     {
         if (vrCanvas == null || headTransform == null) return;
 
@@ -243,17 +325,18 @@ public class GetResults : MonoBehaviour
         );
     }
 
-    // 重置目标物体位置
-    public void Reset()
+    /// <summary>
+    /// 重置目标物体位置
+    /// </summary>
+    public void ResetPosition()
     {
-        // 重置旋转
-        targetObject.rotation = Quaternion.identity;
-
-        // 计算新位置：头显前方0.4米处
-        targetObject.position = headTransform.position + headTransform.forward * 0.4f;
+        targetObject.rotation = Quaternion.identity;// 重置旋转
+        targetObject.position = headTransform.position + headTransform.forward * 0.4f;// 计算新位置：头显前方0.4米处
     }
 
-    // 初始化立方体尺寸（调整为8cm边长）
+    /// <summary>
+    /// 初始化立方体尺寸
+    /// </summary>
     void InitializeCubeSize()
     {
         MeshFilter meshFilter = targetObject.GetComponent<MeshFilter>();
@@ -287,11 +370,11 @@ public class GetResults : MonoBehaviour
     // ---------- 清理资源 ----------
     void OnDestroy()
     {
-        // 关闭网络连接
         if (_client != null)
         {
             _client.Close();
             _client = null;
+            Debug.Log("UDP连接已关闭");
         }
     }
 }

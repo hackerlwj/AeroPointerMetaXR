@@ -13,7 +13,7 @@ public class UIController : MonoBehaviour
     void Start()
     {
         // 开始时只显示打开面板按钮
-        openPanelButton.SetActive(true);
+        //openPanelButton.SetActive(true);
         closePanelButton.SetActive(false);
         panel.SetActive(false);
     }
