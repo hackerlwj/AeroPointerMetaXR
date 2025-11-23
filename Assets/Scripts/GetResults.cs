@@ -119,12 +119,11 @@ public class GetResults : MonoBehaviour
         // 查找中心锚点
         headTransform = GameObject.Find("CenterEyeAnchor").transform;
 
-        // 初始化目标物体
-        InitializeCubeSize();
         ResetPosition();
-
+        // 初始化目标物体
+        //InitializeCubeSize();
         // 网络初始化
-        SetupNetworkConnection();
+        //SetupNetworkConnection();
     }
 
     /// <summary>
