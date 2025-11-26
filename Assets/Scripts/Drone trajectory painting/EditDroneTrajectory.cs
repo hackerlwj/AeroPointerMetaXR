@@ -6,7 +6,7 @@ public class EditDroneTrajectory : MonoBehaviour
     [Header("LineRenderer设置")]
     [SerializeField] private LineRenderer lineRenderer;
     [SerializeField] private GameObject pointPrefab; // 小球预制体
-    [SerializeField] private int pointInterval = 10; // 每隔多少个点生成一个小球
+    [SerializeField] private int pointInterval = 300; // 每隔多少个点生成一个小球
 
     private List<GameObject> controlPoints = new List<GameObject>(); // 存储生成的小球
     private List<Vector3> linePoints = new List<Vector3>(); // 存储LineRenderer的点

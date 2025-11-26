@@ -6,11 +6,12 @@ public class DrawDroneTragectory : MonoBehaviour
 {
     [SerializeField] private LineRenderer lineRenderer;
     [SerializeField] private Transform targetObject;
+    [SerializeField] private Image buttonImage;
     [SerializeField] private Transform headTransform;
     [SerializeField] private float startWidth = 0.05f;
     [SerializeField] private float endWidth = 0.05f;
-    [SerializeField] private float pointDistanceThreshold = 0.01f;
-    [SerializeField] private int maxPoints = 10000;
+    [SerializeField] private float pointDistanceThreshold = 0.001f;
+    [SerializeField] private int maxPoints = 50000;
 
     private bool isDrawing = false;
 
@@ -53,11 +54,20 @@ public class DrawDroneTragectory : MonoBehaviour
     }
     public void StartEndDrawing()
     {
+        if (buttonImage == null)
+        {
+            Debug.LogError("按钮的 Image 组件未找到！");
+            return;
+        }
+
         if (isDrawing)
         {
             isDrawing = false;
             // 结束绘制时整体平滑
             SmoothTrajectory();
+
+            // 改变按钮颜色为 RGB(255, 255, 255)
+            buttonImage.color = new Color32(255, 255, 255, 255);
         }
         else if (!isDrawing)
         {
@@ -65,6 +75,9 @@ public class DrawDroneTragectory : MonoBehaviour
             rawPositions.Clear();
             lineRenderer.positionCount = 0;
             AddPoint();
+
+            // 改变按钮颜色为 RGB(231, 166, 166)
+            buttonImage.color = new Color32(231, 166, 166, 255);
         }
     }
 
